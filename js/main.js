@@ -16,6 +16,9 @@ const SORT_OPTIONS = [
 const STORAGE_KEY = 'todo.tasks.v1';
 let tasks = loadTasks();
 let editingId = null;
+let currentFilter = 'all';
+let searchQuery = '';
+let sortMode = 'default';
 
 // Хранилище
 function loadTasks() {
@@ -243,9 +246,36 @@ function formatDate(isoDate) {
   return parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : isoDate;
 }
 
+function getVisibleTasks() {
+  const query = searchQuery.trim().toLowerCase();
+
+  const visible = tasks.filter((task) => {
+    const byStatus =
+      currentFilter === 'all' ||
+      (currentFilter === 'active' && !task.completed) ||
+      (currentFilter === 'completed' && task.completed);
+    return byStatus && task.title.toLowerCase().includes(query);
+  });
+
+  if (sortMode !== 'default') {
+    visible.sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return sortMode === 'date-asc'
+        ? a.date.localeCompare(b.date)
+        : b.date.localeCompare(a.date);
+    });
+  }
+
+  return visible;
+}
+
 function render() {
+  const visibleTasks = getVisibleTasks();
+
   list.replaceChildren();
-  tasks.forEach((task) => {
+  visibleTasks.forEach((task) => {
     list.append(task.id === editingId ? createEditItem(task) : createTaskItem(task));
   });
 
@@ -253,7 +283,12 @@ function render() {
   counter.textContent = tasks.length
     ? `Задач: ${tasks.length} · выполнено: ${completedCount}`
     : 'Задач нет';
-  emptyState.hidden = tasks.length > 0;
+  emptyState.hidden = visibleTasks.length > 0;
+  emptyTitle.textContent = tasks.length === 0 ? 'Пока задач нет' : 'Ничего не найдено';
+  emptyText.textContent =
+    tasks.length === 0
+      ? 'Добавьте первую задачу — она появится в этом списке.'
+      : 'Измените запрос или фильтр.';
 }
 
 function createTaskItem(task) {
@@ -480,6 +515,26 @@ form.addEventListener('submit', addTask);
 titleInput.addEventListener('input', () => {
   formError.hidden = true;
   titleInput.removeAttribute('aria-invalid');
+});
+
+filterButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    currentFilter = button.dataset.filter;
+    filterButtons.forEach((item) => {
+      item.setAttribute('aria-pressed', String(item === button));
+    });
+    render();
+  });
+});
+
+searchInput.addEventListener('input', () => {
+  searchQuery = searchInput.value;
+  render();
+});
+
+sortSelect.addEventListener('change', () => {
+  sortMode = sortSelect.value;
+  render();
 });
 
 // Запуск
