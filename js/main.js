@@ -1,7 +1,6 @@
 'use strict';
 
-// Константы
-
+// Константы разметки
 const FILTERS = [
   { value: 'all', label: 'Все' },
   { value: 'active', label: 'Активные' },
@@ -13,8 +12,40 @@ const SORT_OPTIONS = [
   { value: 'date-desc', label: 'Сначала с поздней датой' },
 ];
 
-// Шапка
+// Состояние
+const STORAGE_KEY = 'todo.tasks.v1';
+let tasks = loadTasks();
+let editingId = null;
 
+// Хранилище
+function loadTasks() {
+  try {
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    return Array.isArray(data)
+      ? data.filter((task) => task && typeof task.title === 'string')
+      : [];
+  } catch (error) {
+    console.warn('Не удалось прочитать задачи:', error);
+    return [];
+  }
+}
+
+function saveTasks() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+  } catch (error) {
+    console.warn('Не удалось сохранить задачи:', error);
+  }
+}
+
+function createId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+// Шапка
 const app = document.createElement('div');
 app.className = 'app';
 
@@ -41,7 +72,6 @@ counter.textContent = 'Задач нет';
 header.append(heading, counter);
 
 // Форма
-
 const formPanel = document.createElement('section');
 formPanel.className = 'panel';
 
@@ -99,6 +129,7 @@ formError.hidden = true;
 form.append(titleField, dateField, submitButton, formError);
 formPanel.append(form);
 
+// Панель управления
 const toolbarPanel = document.createElement('section');
 toolbarPanel.className = 'panel';
 
@@ -170,8 +201,7 @@ sortField.append(sortLabel, sortSelect);
 toolbar.append(searchField, filterField, sortField);
 toolbarPanel.append(toolbar);
 
-// Список задач
-
+// Список
 const listPanel = document.createElement('section');
 listPanel.className = 'panel';
 
@@ -195,8 +225,6 @@ list.setAttribute('aria-label', 'Список задач');
 
 listPanel.append(emptyState, list);
 
-// Сборка страницы
-
 const announcer = document.createElement('p');
 announcer.className = 'visually-hidden';
 announcer.setAttribute('role', 'status');
@@ -209,10 +237,252 @@ main.append(formPanel, toolbarPanel, listPanel);
 
 app.append(header, main, announcer);
 
+// Отрисовка
+function formatDate(isoDate) {
+  const parts = isoDate.split('-');
+  return parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : isoDate;
+}
+
+function render() {
+  list.replaceChildren();
+  tasks.forEach((task) => {
+    list.append(task.id === editingId ? createEditItem(task) : createTaskItem(task));
+  });
+
+  const completedCount = tasks.filter((task) => task.completed).length;
+  counter.textContent = tasks.length
+    ? `Задач: ${tasks.length} · выполнено: ${completedCount}`
+    : 'Задач нет';
+  emptyState.hidden = tasks.length > 0;
+}
+
+function createTaskItem(task) {
+  const item = document.createElement('li');
+  item.className = task.completed ? 'task task--completed' : 'task';
+  item.dataset.id = task.id;
+
+  const checkbox = document.createElement('input');
+  checkbox.className = 'task__checkbox';
+  checkbox.type = 'checkbox';
+  checkbox.checked = task.completed;
+  checkbox.setAttribute(
+    'aria-label',
+    task.completed
+      ? `Вернуть задачу «${task.title}» в работу`
+      : `Отметить задачу «${task.title}» выполненной`,
+  );
+  checkbox.addEventListener('change', () => toggleTask(task.id));
+
+  const content = document.createElement('div');
+  content.className = 'task__content';
+
+  const taskTitle = document.createElement('span');
+  taskTitle.className = 'task__title';
+  taskTitle.textContent = task.title;
+  content.append(taskTitle);
+
+  if (task.date) {
+    const taskDate = document.createElement('time');
+    taskDate.className = 'task__date';
+    taskDate.dateTime = task.date;
+    taskDate.textContent = formatDate(task.date);
+    content.append(taskDate);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'task__actions';
+
+  const editButton = document.createElement('button');
+  editButton.className = 'btn btn--ghost';
+  editButton.type = 'button';
+  editButton.textContent = 'Изменить';
+  editButton.addEventListener('click', () => startEdit(task.id));
+
+  const deleteButton = document.createElement('button');
+  deleteButton.className = 'btn btn--ghost task__delete';
+  deleteButton.type = 'button';
+  deleteButton.textContent = 'Удалить';
+  deleteButton.addEventListener('click', () => deleteTask(task.id));
+
+  actions.append(editButton, deleteButton);
+  item.append(checkbox, content, actions);
+  return item;
+}
+
+function createEditItem(task) {
+  const item = document.createElement('li');
+  item.className = 'task task--editing';
+  item.dataset.id = task.id;
+
+  const editForm = document.createElement('form');
+  editForm.className = 'task__edit';
+
+  const editTitle = document.createElement('input');
+  editTitle.className = 'input';
+  editTitle.type = 'text';
+  editTitle.value = task.title;
+  editTitle.maxLength = 200;
+  editTitle.setAttribute('aria-label', 'Название задачи');
+
+  const editDate = document.createElement('input');
+  editDate.className = 'input';
+  editDate.type = 'date';
+  editDate.value = task.date || '';
+  editDate.setAttribute('aria-label', 'Дата задачи');
+
+  const saveButton = document.createElement('button');
+  saveButton.className = 'btn btn--primary';
+  saveButton.type = 'submit';
+  saveButton.textContent = 'Сохранить';
+
+  const cancelButton = document.createElement('button');
+  cancelButton.className = 'btn btn--ghost';
+  cancelButton.type = 'button';
+  cancelButton.textContent = 'Отмена';
+  cancelButton.addEventListener('click', cancelEdit);
+
+  const editError = document.createElement('p');
+  editError.className = 'form__error';
+  editError.hidden = true;
+  editError.setAttribute('role', 'alert');
+
+  editForm.append(editTitle, editDate, saveButton, cancelButton, editError);
+
+  editForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const newTitle = editTitle.value.trim();
+
+    if (!newTitle) {
+      editError.textContent = 'Название не может быть пустым.';
+      editError.hidden = false;
+      editTitle.focus();
+      return;
+    }
+
+    updateTask(task.id, { title: newTitle, date: editDate.value });
+    editingId = null;
+    render();
+    focusTask(task.id);
+    announce('Задача сохранена.');
+  });
+
+  editForm.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelEdit();
+    }
+  });
+
+  item.append(editForm);
+  return item;
+}
+
+function focusTask(id) {
+  const item = [...list.children].find((node) => node.dataset.id === id);
+  if (!item) return;
+
+  const target = item.querySelector('.task__checkbox') || item.querySelector('button');
+  if (target) target.focus();
+}
+
+// Действия
+function addTask(event) {
+  event.preventDefault();
+  const value = titleInput.value.trim();
+
+  if (!value) {
+    formError.textContent = 'Введите название задачи.';
+    formError.hidden = false;
+    titleInput.setAttribute('aria-invalid', 'true');
+    titleInput.focus();
+    return;
+  }
+
+  formError.hidden = true;
+  titleInput.removeAttribute('aria-invalid');
+
+  tasks.push({
+    id: createId(),
+    title: value,
+    date: dateInput.value,
+    completed: false,
+    createdAt: Date.now(),
+  });
+
+  saveTasks();
+  form.reset();
+  titleInput.focus();
+  render();
+  announce('Задача добавлена.');
+}
+
+function startEdit(id) {
+  editingId = id;
+  render();
+
+  const item = [...list.children].find((node) => node.dataset.id === id);
+  const input = item && item.querySelector('input[type="text"]');
+  if (input) {
+    input.focus();
+    input.select();
+  }
+}
+
+function cancelEdit() {
+  editingId = null;
+  render();
+  announce('Редактирование отменено.');
+}
+
+function updateTask(id, changes) {
+  const task = tasks.find((item) => item.id === id);
+  if (!task) return;
+
+  Object.assign(task, changes);
+  saveTasks();
+}
+
+function toggleTask(id) {
+  const task = tasks.find((item) => item.id === id);
+  if (!task) return;
+
+  task.completed = !task.completed;
+  saveTasks();
+  render();
+  focusTask(id);
+  announce(task.completed ? 'Задача выполнена.' : 'Задача снова активна.');
+}
+
+function deleteTask(id) {
+  const task = tasks.find((item) => item.id === id);
+  if (!task) return;
+
+  if (!window.confirm(`Удалить задачу «${task.title}»?`)) return;
+
+  tasks = tasks.filter((item) => item.id !== id);
+  if (editingId === id) editingId = null;
+
+  saveTasks();
+  render();
+  announce('Задача удалена.');
+}
+
+function announce(message) {
+  announcer.textContent = '';
+  window.setTimeout(() => {
+    announcer.textContent = message;
+  }, 50);
+}
+
+// События
+form.addEventListener('submit', addTask);
+
+titleInput.addEventListener('input', () => {
+  formError.hidden = true;
+  titleInput.removeAttribute('aria-invalid');
+});
+
+// Запуск
 document.body.append(app);
 document.title = 'Мои задачи — ToDo-лист';
-
-// Заглушка до следующего этапа: форма пока не должна перезагружать страницу.
-form.addEventListener('submit', (event) => {
-  event.preventDefault();
-});
+render();

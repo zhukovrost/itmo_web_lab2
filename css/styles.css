@@ -42,8 +42,6 @@ button {
   cursor: pointer;
 }
 
-/* Каркас */
-
 .app {
   display: grid;
   gap: 20px;
@@ -82,12 +80,11 @@ button {
 .app__subtitle,
 .app__counter,
 .field__label,
+.task__date,
 .empty-state {
   color: var(--muted);
   font-size: 0.875rem;
 }
-
-/* Поля и кнопки */
 
 .field {
   display: grid;
@@ -134,8 +131,6 @@ button {
   background: #fff;
 }
 
-/* Управление */
-
 .task-form {
   display: grid;
   grid-template-columns: 1fr 160px auto;
@@ -169,8 +164,6 @@ button {
   color: #fff;
 }
 
-/* Список */
-
 .task-list {
   border-top: 1px solid var(--border);
 }
@@ -191,7 +184,69 @@ button {
   font-weight: 600;
 }
 
-/* Служебное */
+.task {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.task--editing {
+  display: block;
+}
+
+.task__checkbox {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+}
+
+.task__content {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.task__title {
+  overflow-wrap: anywhere;
+}
+
+.task--completed .task__title {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.task__actions {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.task__actions .btn {
+  padding: 4px 8px;
+  font-size: 0.8125rem;
+}
+
+.task__delete {
+  border-color: transparent;
+  background: transparent;
+  color: var(--danger);
+}
+
+.task__edit {
+  display: grid;
+  grid-template-columns: 1fr 150px auto auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.task__edit .form__error {
+  grid-column: 1 / -1;
+}
 
 .visually-hidden {
   position: absolute;
@@ -208,15 +263,23 @@ button {
   display: none !important;
 }
 
-/* Мобильная версия */
-
 @media (max-width: 640px) {
   .task-form,
-  .toolbar {
+  .toolbar,
+  .task__edit {
     grid-template-columns: 1fr;
   }
 
-  .task-form > .btn {
+  .task-form > .btn,
+  .task__edit .btn {
+    width: 100%;
+  }
+
+  .task {
+    flex-wrap: wrap;
+  }
+
+  .task__actions {
     width: 100%;
   }
 }
