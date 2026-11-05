@@ -19,6 +19,7 @@ let editingId = null;
 let currentFilter = 'all';
 let searchQuery = '';
 let sortMode = 'default';
+let draggedId = null;
 
 // Хранилище
 function loadTasks() {
@@ -295,6 +296,9 @@ function createTaskItem(task) {
   const item = document.createElement('li');
   item.className = task.completed ? 'task task--completed' : 'task';
   item.dataset.id = task.id;
+  item.draggable = sortMode === 'default';
+  item.addEventListener('dragstart', handleDragStart);
+  item.addEventListener('dragend', handleDragEnd);
 
   const checkbox = document.createElement('input');
   checkbox.className = 'task__checkbox';
@@ -420,6 +424,80 @@ function focusTask(id) {
   if (target) target.focus();
 }
 
+// Drag and drop
+function handleDragStart(event) {
+  const item = event.currentTarget;
+  draggedId = item.dataset.id;
+  item.classList.add('task--dragging');
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', draggedId);
+}
+
+function handleDragEnd() {
+  resetDrag();
+}
+
+function handleDragOver(event) {
+  if (!draggedId) return;
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  clearDragMarks();
+
+  const target = event.target.closest('.task');
+  if (!target || target.dataset.id === draggedId) return;
+
+  const rect = target.getBoundingClientRect();
+  const after = event.clientY > rect.top + rect.height / 2;
+  target.classList.add(after ? 'task--drag-after' : 'task--drag-before');
+}
+
+function handleDragLeave(event) {
+  if (!list.contains(event.relatedTarget)) clearDragMarks();
+}
+
+function handleDrop(event) {
+  if (!draggedId) return;
+
+  event.preventDefault();
+
+  const target = event.target.closest('.task');
+  const ids = tasks.map((task) => task.id);
+  const from = ids.indexOf(draggedId);
+  if (from === -1) return resetDrag();
+
+  const to = target ? ids.indexOf(target.dataset.id) : ids.length;
+  if (to === -1 || to === from) return resetDrag();
+
+  const rect = target && target.getBoundingClientRect();
+  const after = !target || event.clientY > rect.top + rect.height / 2;
+  const [moved] = ids.splice(from, 1);
+  let insert = from < to ? to - 1 : to;
+  if (after) insert += 1;
+
+  ids.splice(insert, 0, moved);
+  tasks = ids.map((id) => tasks.find((task) => task.id === id));
+
+  saveTasks();
+  resetDrag();
+  render();
+  announce('Порядок задач изменён.');
+}
+
+function resetDrag() {
+  draggedId = null;
+  list.querySelectorAll('.task--dragging').forEach((node) => {
+    node.classList.remove('task--dragging');
+  });
+  clearDragMarks();
+}
+
+function clearDragMarks() {
+  list.querySelectorAll('.task--drag-before, .task--drag-after').forEach((node) => {
+    node.classList.remove('task--drag-before', 'task--drag-after');
+  });
+}
+
 // Действия
 function addTask(event) {
   event.preventDefault();
@@ -536,6 +614,10 @@ sortSelect.addEventListener('change', () => {
   sortMode = sortSelect.value;
   render();
 });
+
+list.addEventListener('dragover', handleDragOver);
+list.addEventListener('dragleave', handleDragLeave);
+list.addEventListener('drop', handleDrop);
 
 // Запуск
 document.body.append(app);
